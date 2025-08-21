@@ -119,4 +119,86 @@ router.get("/getPaymentsByMode/:mode", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Add this to your payment routes file
+
+const fs = require("fs");
+
+// Route to serve payment images
+router.get("/getPaymentImage/:filename", (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const imagePath = path.join(__dirname, "../uploads", filename);
+
+    // Check if file exists
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    // Send the file
+    res.sendFile(imagePath);
+  } catch (error) {
+    console.error("Error serving image:", error);
+    res.status(500).json({ message: "Error serving image" });
+  }
+});
+
+// Route to get payment details with image URL
+router.get("/getPaymentWithImage/:paymentId", async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.paymentId)
+      .populate("userID", "name phoneNumber email")
+      .exec();
+
+    if (!payment) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
+
+    // Add image URL if image exists
+    const paymentData = payment.toObject();
+    if (paymentData.userPaymentImage) {
+      paymentData.imageUrl = `${req.protocol}://${req.get(
+        "host"
+      )}/api/payment/getPaymentImage/${paymentData.userPaymentImage}`;
+    }
+
+    res.status(200).json({
+      message: "Payment fetched successfully",
+      payment: paymentData,
+    });
+  } catch (error) {
+    console.error("Error fetching payment:", error);
+    res.status(500).json({ message: "Error fetching payment" });
+  }
+});
+
+// Route to get all payments with image URLs
+router.get("/getAllPaymentsWithImages", async (req, res) => {
+  try {
+    const payments = await Payment.find()
+      .populate("userID", "name phoneNumber email")
+      .exec();
+
+    // Add image URLs to each payment
+    const paymentsWithImages = payments.map((payment) => {
+      const paymentData = payment.toObject();
+      if (paymentData.userPaymentImage) {
+        paymentData.imageUrl = `${req.protocol}://${req.get(
+          "host"
+        )}/userPayment/getPaymentImage/${paymentData.userPaymentImage}`;
+      }
+      return paymentData;
+    });
+
+    res.status(200).json({
+      message: "Payments fetched successfully",
+      count: paymentsWithImages.length,
+      payments: paymentsWithImages,
+    });
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    res.status(500).json({ message: "Error fetching payments" });
+  }
+});
+
 module.exports = router;

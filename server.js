@@ -9,7 +9,7 @@ const usersRouter = require("./routes/users");
 const subscriptionsRouter = require("./routes/subscriptions");
 const userSubscription = require("./models/Subscription"); // Importing the Subscription schema
 var cors = require("cors");
-const  User  = require("./models/User"); // Import both models
+const User = require("./models/User"); // Import both models
 const UserCoupon = require("./models/Coupon"); // Importing the UserCoupon schema
 const societies = require("./routes/societies"); // Importing the MasterTable route
 const Payment = require("./models/Payment"); // Importing the Payment schema
@@ -20,7 +20,7 @@ const adminRouter = require("./routes/admin"); // Importing the Admin route
 const ManualAdmin = require("./models/ManualAdmin");
 const manualAdmin = require("./routes/manualAdmin"); // Importing the ManualAdmin route
 const adminStatsRoutes = require("./routes/adminDashboard"); // Importing the Admin Dashboard route
-
+const userDashboard = require("./routes/userDashboard"); // Importing the User Dashboard route
 
 // MongoDB Connection
 mongoose.connect(MONGO_URI, {
@@ -38,8 +38,8 @@ db.on("error", console.error.bind(console, "MongoDB connection error:"));
 db.once("open", async () => {
   console.log("Connected to MongoDB");
   try {
-     await User.syncIndexes();
-     await UserCoupon.syncIndexes(); 
+    await User.syncIndexes();
+    await UserCoupon.syncIndexes();
     console.log("Indexes synced");
   } catch (error) {
     console.error("Error syncing indexes:", error);
@@ -48,7 +48,6 @@ db.once("open", async () => {
 
 // Middleware
 app.use(bodyParser.json());
-
 
 //Cors
 app.use(cors());
@@ -62,9 +61,10 @@ app.use("/societies", societies); // Using the MasterTable route);
 app.use("/userSubscription", subscriptionsRouter); // Using the Subscription route
 app.use("/userPayment", userPayment); // Using the Payment route
 app.use("/userCoupon", userCoupon); // Using the UserCoupon route
-app.use("/admin",adminRouter); // Using the Admin route
-app.use("/manualAdmin",manualAdmin); // Using the ManualAdmin route
-app.use("/adminDashboard",adminStatsRoutes); // Using the Admin Dashboard route
+app.use("/admin", adminRouter); // Using the Admin route
+app.use("/manualAdmin", manualAdmin); // Using the ManualAdmin route
+app.use("/adminDashboard", adminStatsRoutes); // Using the Admin Dashboard route
+app.use("/userDashboard", userDashboard); // Using the User Dashboard route
 
 app.use("/uploads", express.static("uploads"));
 
