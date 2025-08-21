@@ -4,6 +4,7 @@ const User = require("../models/User");
 const mongoose = require("mongoose");
 const manualAdmin = require("../models/ManualAdmin"); // Importing the ManualAdmin schema
 const ManualPayment = require("../models/ManualPaymentSchema"); // Importing the ManualPayment schema
+const Subscription = require("../models/Subscription");
 
 // 1. Admin manual user registration
 router.post("/register-user", async (req, res) => {
@@ -85,5 +86,35 @@ router.post("/manual-payment", async (req, res) => {
 //     res.status(500).json({ message: err.message });
 //   }
 // });
+
+router.get("/all-users", async (req, res) => {
+  try {
+    const users = await manualAdmin.find().populate("name");
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/total-family-manual-subscription", async (req, res) => {
+  try {
+    const normalFamilies = await Subscription.countDocuments();
+    const manualFamilies = await manualAdmin.countDocuments();
+
+    const totalFamilies = normalFamilies + manualFamilies;
+    const totalAmount = totalFamilies * 1000;
+
+    res.json({
+      normalFamilies,
+      manualFamilies,
+      totalFamilies,
+      totalAmount,
+      perFamilySubscription: 1000,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 module.exports = router;

@@ -7,6 +7,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
+const ManualPaymentSchema = require("../models/ManualPaymentSchema");
 
 dotenv.config();
 
@@ -89,46 +90,101 @@ router.post("/createSubscription", async (req, res) => {
   }
 });
 
-router.get("/getCouponsData", async (req, res) => {
+router.get("/total-coupon-amount", async (req, res) => {
   try {
+    // 1. Fetch from Subscription
     const subscriptions = await Subscription.find({}).select(
       "SaptamiCoupons NabamiCoupons DashamiCoupons"
     );
 
-    if (!subscriptions || subscriptions.length === 0) {
-      return res.status(200).json({
-        SaptamiCoupons: 0,
-        NabamiCoupons: 0,
-        DashamiCoupons: 0,
-        message: "No subscriptions found",
-      });
-    }
-
-    // Calculate totals by summing all subscriptions
-    const totals = subscriptions.reduce(
-      (acc, sub) => {
-        acc.SaptamiCoupons += (sub.SaptamiCoupons || 0) * 500;
-        acc.NabamiCoupons += (sub.NabamiCoupons || 0) * 500;
-        acc.DashamiCoupons += (sub.DashamiCoupons || 0) * 500;
-        return acc;
-      },
-      {
-        SaptamiCoupons: 0,
-        NabamiCoupons: 0,
-        DashamiCoupons: 0,
-      }
+    // 2. Fetch from ManualUserCoupon
+    const manualCoupons = await ManualPaymentSchema.find({}).select(
+      "saptamiCoupons navamiCoupons dashamiCoupons"
     );
 
-    console.log("Calculated totals:", totals);
+    // Helper function to calculate total coupons for each type from subscriptions
+    const calculateCouponsFromSubscriptions = (docs) => {
+      return docs.reduce(
+        (totals, doc) => ({
+          saptami: totals.saptami + (doc.SaptamiCoupons || 0),
+          navami: totals.navami + (doc.NabamiCoupons || 0),
+          dashami: totals.dashami + (doc.DashamiCoupons || 0),
+        }),
+        { saptami: 0, navami: 0, dashami: 0 }
+      );
+    };
 
-    res.status(200).json(totals);
+    // Helper function to calculate total coupons for each type from manual payments
+    const calculateCouponsFromManual = (docs) => {
+      return docs.reduce(
+        (totals, doc) => ({
+          saptami: totals.saptami + (doc.saptamiCoupons || 0),
+          navami: totals.navami + (doc.navamiCoupons || 0),
+          dashami: totals.dashami + (doc.dashamiCoupons || 0),
+        }),
+        { saptami: 0, navami: 0, dashami: 0 }
+      );
+    };
+
+    const subscriptionCoupons =
+      calculateCouponsFromSubscriptions(subscriptions);
+    const manualCouponTotals = calculateCouponsFromManual(manualCoupons);
+
+    // Calculate total coupons for each type
+    const saptamiTotalCoupons =
+      subscriptionCoupons.saptami + manualCouponTotals.saptami;
+    const navamiTotalCoupons =
+      subscriptionCoupons.navami + manualCouponTotals.navami;
+    const dashamiTotalCoupons =
+      subscriptionCoupons.dashami + manualCouponTotals.dashami;
+
+    // Calculate amounts (each coupon = 500)
+    const saptamiTotalAmount = saptamiTotalCoupons * 500;
+    const navamiTotalAmount = navamiTotalCoupons * 500;
+    const dashamiTotalAmount = dashamiTotalCoupons * 500;
+
+    // Calculate user and manual amounts for backward compatibility
+    const userCouponAmount =
+      (subscriptionCoupons.saptami +
+        subscriptionCoupons.navami +
+        subscriptionCoupons.dashami) *
+      500;
+    const manualCouponAmount =
+      (manualCouponTotals.saptami +
+        manualCouponTotals.navami +
+        manualCouponTotals.dashami) *
+      500;
+    const totalCouponAmount = userCouponAmount + manualCouponAmount;
+
+    res.status(200).json({
+      // Separate coupon counts
+      saptamiTotalCoupons,
+      navamiTotalCoupons,
+      dashamiTotalCoupons,
+
+      // Separate amounts
+      saptamiTotalAmount,
+      navamiTotalAmount,
+      dashamiTotalAmount,
+
+      // Original response structure (for backward compatibility)
+      userCouponAmount,
+      manualCouponAmount,
+      totalCouponAmount,
+    });
   } catch (err) {
-    console.error("Error fetching coupons data:", err.message);
+    console.error("Error fetching total coupon amount:", err.message);
     res.status(500).json({
       message: "Server error",
-      SaptamiCoupons: 0,
-      NabamiCoupons: 0,
-      DashamiCoupons: 0,
+      saptamiTotalCoupons: 0,
+      navamiTotalCoupons: 0,
+      dashamiTotalCoupons: 0,
+      saptamiTotalAmount: 0,
+      navamiTotalAmount: 0,
+      dashamiTotalAmount: 0,
+      userCouponAmount: 0,
+      manualCouponAmount: 0,
+      totalCouponAmount: 0,
     });
   }
 });

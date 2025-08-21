@@ -4,8 +4,8 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     cooperativeSociety: { type: String, required: true },
-    flatNumber: { type: String, required: true},
-    name: { type: String, required: true, unique: true },
+    flatNumber: { type: String, required: true },
+    name: { type: String, required: true },
     phoneNumber: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     userRole: { type: String, enum: ["U01", "U02", "U03"] },
@@ -29,8 +29,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: { updatedAt: "updated_at" } }
 );
 
-
 const User = mongoose.model("User", userSchema);
 
-
-module.exports =  User;
+module.exports = User;
