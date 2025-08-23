@@ -30,7 +30,7 @@ router.post("/createPayment", async (req, res) => {
       userTransferBankName,
       userPaymentSubscriptionDesc,
       userLastUpdatedBy,
-      userPaymentImageBase64, // base64 string from client
+      userPaymentImage, // base64 string from client
     } = req.body;
 
     const payment = new Payment({
@@ -45,7 +45,7 @@ router.post("/createPayment", async (req, res) => {
       userChequeNumber,
       userChequeBankName,
       userTransferBankName,
-      userPaymentImage: userPaymentImageBase64 || "",
+      userPaymentImage: userPaymentImage || "",
       userPaymentSubscriptionDesc,
       userLastUpdatedBy,
     });
