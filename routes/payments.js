@@ -45,7 +45,7 @@ router.post("/createPayment", async (req, res) => {
       userChequeNumber,
       userChequeBankName,
       userTransferBankName,
-      userPaymentImage: userPaymentImageBase64 || null,
+      userPaymentImage: userPaymentImageBase64 || "",
       userPaymentSubscriptionDesc,
       userLastUpdatedBy,
     });
