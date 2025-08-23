@@ -9,63 +9,58 @@ const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 const Payment = require("../models/Payment");
 const upload = require("../middleware/upload");
-
 dotenv.config();
-
 const router = express.Router();
 
 // post/payment/createPayment
 // Create Payment with image
-router.post(
-  "/createPayment",
-  upload.single("userPaymentImage"),
-  async (req, res) => {
-    try {
-      const {
-        userID,
-        cooperativeSociety,
-        flatNumber,
-        userPaymentDate,
-        userPaymentAmount,
-        userPaymentMode,
-        userPaymentMethod,
-        userPaymentRefID,
-        userChequeNumber,
-        userChequeBankName,
-        userTransferBankName,
-        userPaymentSubscriptionDesc,
-        userLastUpdatedBy,
-      } = req.body;
+router.post("/createPayment", async (req, res) => {
+  try {
+    const {
+      userID,
+      cooperativeSociety,
+      flatNumber,
+      userPaymentDate,
+      userPaymentAmount,
+      userPaymentMode,
+      userPaymentMethod,
+      userPaymentRefID,
+      userChequeNumber,
+      userChequeBankName,
+      userTransferBankName,
+      userPaymentSubscriptionDesc,
+      userLastUpdatedBy,
+      userPaymentImageBase64, // base64 string from client
+    } = req.body;
 
-      const payment = new Payment({
-        userID,
-        cooperativeSociety,
-        flatNumber,
-        userPaymentDate: userPaymentDate ? new Date(userPaymentDate) : null,
-        userPaymentAmount,
-        userPaymentMode,
-        userPaymentMethod: userPaymentMethod || "OFFLINE", // Default to OFFLINE if not provided
-        userPaymentRefID,
-        userChequeNumber,
-        userChequeBankName,
-        userTransferBankName,
-        userPaymentImage: req.file ? req.file.filename : null, // save only filename
-        userPaymentSubscriptionDesc,
-        userLastUpdatedBy,
-      });
+    const payment = new Payment({
+      userID,
+      cooperativeSociety,
+      flatNumber,
+      userPaymentDate: userPaymentDate ? new Date(userPaymentDate) : null,
+      userPaymentAmount,
+      userPaymentMode,
+      userPaymentMethod: userPaymentMethod || "OFFLINE",
+      userPaymentRefID,
+      userChequeNumber,
+      userChequeBankName,
+      userTransferBankName,
+      userPaymentImage: userPaymentImageBase64 || null,
+      userPaymentSubscriptionDesc,
+      userLastUpdatedBy,
+    });
 
-      await payment.save();
+    await payment.save();
 
-      res.status(201).json({
-        message: "Payment created successfully",
-        payment,
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Error creating payment", error });
-    }
+    res.status(201).json({
+      message: "Payment created successfully",
+      payment,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error creating payment", error });
   }
-);
+});
 
 // make payment
 // router.post("/makePayment", async (req, res) => {
