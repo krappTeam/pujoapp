@@ -30,7 +30,7 @@ router.post("/register", async (req, res) => {
       phoneNumber,
       password,
       userRole,
-      userSecretCode, // Fixed typo: was userSceretCode
+      userSecretCode,
       userCpnActiveStatus,
     } = req.body;
 
@@ -51,7 +51,7 @@ router.post("/register", async (req, res) => {
     const newUser = new User({
       cooperativeSociety: cooperativeSociety,
       flatNumber: flatNumber,
-      name: name, // Fixed: was this.name
+      name: name,
       phoneNumber: phoneNumber,
       password: hashedPassword, // Use hashedPassword when bcrypt is working
       userRole: userRole,
