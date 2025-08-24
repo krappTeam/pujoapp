@@ -40,7 +40,7 @@ router.post("/register", async (req, res) => {
 
     // Check if the user already exists (check multiple unique fields)
     const existingUser = await User.findOne({
-      $or: [{ name: name }, { phoneNumber: phoneNumber }],
+      $or: [{ phoneNumber: phoneNumber }],
     });
 
     if (existingUser) {
