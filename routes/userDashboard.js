@@ -127,4 +127,129 @@ router.get("/user-dashboard/:phoneNumber", async (req, res) => {
   }
 });
 
+//------------------------USER DASHBOARD TICKET-----------------//WITH MANUAL USER
+
+router.get("/userDashboardTicket/:userID", async (req, res) => {
+  try {
+    const { userID } = req.params;
+
+    // 1. Try to find user in NormalUser
+    let user = await User.findById(userID);
+    let userType = "normal";
+
+    // 2. If not found, try ManualUser
+    if (!user) {
+      user = await ManualUser.findById(userID);
+      userType = "manual";
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3. Subscriptions
+    let subscriptions = await Subscription.find({ userID });
+
+    if (userType === "manual") {
+      subscriptions = subscriptions.map((s) => ({
+        ...s.toObject(),
+        userSubscriptionStatus: "APP", // force approved
+      }));
+    }
+
+    // Normalize statuses
+    const mapStatus = { PEN: "PEN", APP: "APR", REJ: "REJ" };
+
+    const subscriptionStats = {
+      pending: subscriptions.filter(
+        (s) => mapStatus[s.userSubscriptionStatus] === "PEN"
+      ),
+      approved: subscriptions.filter(
+        (s) => mapStatus[s.userSubscriptionStatus] === "APR"
+      ),
+      rejected: subscriptions.filter(
+        (s) => mapStatus[s.userSubscriptionStatus] === "REJ"
+      ),
+    };
+
+    const subscriptionSummary = {
+      total: subscriptions.length,
+      pendingCount: subscriptionStats.pending.length,
+      approvedCount: subscriptionStats.approved.length,
+      rejectedCount: subscriptionStats.rejected.length,
+      totalApprovedAmount: subscriptionStats.approved.reduce(
+        (sum, s) => sum + (s.userSubscriptionAmount || 0),
+        0
+      ),
+    };
+
+    // 4. Coupons - Calculate for each day separately
+    const couponPrice = 500;
+
+    const couponByDay = {
+      Saptami: { totalCoupons: 0, totalAmount: 0, details: [] },
+      Nabami: { totalCoupons: 0, totalAmount: 0, details: [] },
+      Dashami: { totalCoupons: 0, totalAmount: 0, details: [] },
+    };
+
+    // Calculate coupons for each day
+    subscriptions.forEach((sub) => {
+      ["Saptami", "Nabami", "Dashami"].forEach((day) => {
+        const count = sub[day + "Coupons"] || 0;
+        const amount = count * couponPrice;
+
+        couponByDay[day].totalCoupons += count;
+        couponByDay[day].totalAmount += amount;
+
+        if (count > 0) {
+          couponByDay[day].details.push({
+            subscriptionId: sub._id,
+            count,
+            amount,
+          });
+        }
+      });
+    });
+
+    // 5. Use only ONE day for total calculation (change "Saptami" to your preferred day)
+    const selectedDay = "Saptami"; // Change this to "Nabami" or "Dashami" as needed
+    const totalCoupons = couponByDay[selectedDay].totalCoupons;
+    const totalCouponAmount = totalCoupons * couponPrice;
+
+    // ✅ Final Total Amount = Subscription (approved) + Coupon (one day only)
+    const grandTotal =
+      subscriptionSummary.totalApprovedAmount + totalCouponAmount;
+
+    // 6. Response
+    res.json({
+      message: "User Dashboard",
+      userType,
+      user: {
+        name: user.name,
+        flatNumber: user.flatNumber || user.flat,
+        cooperativeSociety: user.cooperativeSociety,
+        phoneNumber: user.phoneNumber || user.mobileNumber,
+      },
+      subscriptions: {
+        summary: subscriptionSummary,
+        details: subscriptions,
+      },
+      coupons: {
+        totalCoupons, // Only from selected day
+        totalCouponAmount, // Only from selected day × 500
+        selectedDay, // Shows which day was used for calculation
+        byDay: couponByDay, // Still shows breakdown by all days
+      },
+      totals: {
+        subscriptionAmount: subscriptionSummary.totalApprovedAmount,
+        couponAmount: totalCouponAmount,
+        grandTotal,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching dashboard:", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
 module.exports = router;
