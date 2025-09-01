@@ -252,4 +252,151 @@ router.get("/userDashboardTicket/:userID", async (req, res) => {
   }
 });
 
+//-----------GET USER DASHBOARD TICKET (both normal and manual users)-----------------//
+// ==========================
+// User Dashboard Payments+Coupons
+// ==========================
+router.get("/userDashboardPayments/:userID", async (req, res) => {
+  try {
+    const { userID } = req.params;
+    let user = await User.findById(userID);
+    let userType = "normal";
+    if (!user) {
+      user = await ManualUser.findById(userID);
+      userType = "manual";
+    }
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const couponPrice = 500;
+    let payments = [];
+    let subscriptions = [];
+    let familyAmount = 0;
+    let paid = false;
+    let totalCoupons = 0;
+    const couponByDay = {
+      Saptami: { totalCoupons: 0, totalAmount: 0, details: [] },
+      Nabami: { totalCoupons: 0, totalAmount: 0, details: [] },
+      Dashami: { totalCoupons: 0, totalAmount: 0, details: [] },
+    };
+    let approvedFamilyPayments = [];
+
+    if (userType === "normal") {
+      payments = await Payment.find({ userID });
+      subscriptions = await Subscription.find({ userID });
+
+      approvedFamilyPayments = subscriptions.filter(
+        (p) => p.userSubscriptionStatus === "APR"
+      );
+
+      // Check if any approved subscription has familyAmount >= 1000
+      const hasLargeFamilyPayment = approvedFamilyPayments.some(
+        (p) => Number(p.userFamilyAmount || 0) >= 1000
+      );
+
+      if (hasLargeFamilyPayment) {
+        // Only count the first such subscription
+        const firstLargePayment = approvedFamilyPayments.find(
+          (p) => Number(p.userFamilyAmount || 0) >= 1000
+        );
+        familyAmount = Number(firstLargePayment.userFamilyAmount) || 1000;
+        approvedFamilyPayments = [firstLargePayment];
+      } else {
+        familyAmount = approvedFamilyPayments.reduce(
+          (sum, p) => sum + Number(p.userFamilyAmount || 0),
+          0
+        );
+        if (familyAmount === 0 && approvedFamilyPayments.length > 0) {
+          const fixedFamilyAmountPerSubscription = 1000;
+          familyAmount =
+            approvedFamilyPayments.length * fixedFamilyAmountPerSubscription;
+        }
+      }
+
+      paid = approvedFamilyPayments.length > 0;
+
+      subscriptions.forEach((sub) => {
+        const couponCount = sub.SaptamiCoupons || 0;
+        totalCoupons += couponCount;
+        ["Saptami", "Nabami", "Dashami"].forEach((day) => {
+          couponByDay[day].totalCoupons += couponCount;
+          couponByDay[day].totalAmount =
+            couponByDay[day].totalCoupons * couponPrice;
+          if (couponCount > 0) {
+            couponByDay[day].details.push({
+              subscriptionId: sub._id,
+              count: couponCount,
+              amount: couponCount * couponPrice,
+            });
+          }
+        });
+      });
+    }
+
+    if (userType === "manual") {
+      payments = await ManualPayment.find({ userId: userID });
+
+      familyAmount = payments.reduce(
+        (sum, p) => sum + Number(p.familyAmount || 0),
+        0
+      );
+
+      paid = payments.some((p) => p.paymentStatus === "APR");
+
+      payments.forEach((p) => {
+        const couponCount = p.saptamiCoupons || 0;
+        totalCoupons += couponCount;
+        ["Saptami", "Nabami", "Dashami"].forEach((day) => {
+          couponByDay[day].totalCoupons += couponCount;
+          const amount = couponCount * couponPrice;
+          couponByDay[day].totalAmount += amount;
+          if (couponCount > 0) {
+            couponByDay[day].details.push({
+              paymentId: p._id,
+              count: couponCount,
+              amount,
+            });
+          }
+        });
+      });
+    }
+
+    const totalCouponAmount = totalCoupons * couponPrice;
+    const grandTotal = familyAmount + totalCouponAmount;
+
+    res.json({
+      message: "User Dashboard Payments",
+      userType,
+      user: {
+        name: user.name,
+        flatNumber: user.flatNumber || user.flat,
+        cooperativeSociety: user.cooperativeSociety,
+        phoneNumber: user.phoneNumber || user.mobileNumber,
+      },
+      payments,
+      family: {
+        paid,
+        familyAmount: Payment.userFamilyAmount,
+        subscriptionStatus:
+          userType === "normal"
+            ? approvedFamilyPayments.map((sub) => sub.userSubscriptionStatus)
+            : null,
+      },
+      coupons: {
+        totalCoupons,
+        byDay: couponByDay,
+        totalCouponAmount,
+      },
+      totals: {
+        familyAmount,
+        couponAmount: totalCouponAmount,
+        grandTotal,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching user payments:", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
 module.exports = router;

@@ -145,4 +145,105 @@ router.get("/total-family-subscription", async (req, res) => {
   }
 });
 
+//---------ADMIN DASHBOARD ROUTE ------------//
+
+router.get("/adminDashboardList", async (req, res) => {
+  try {
+    // Fixed subscription amount per family
+    const FAMILY_SUBSCRIPTION_AMOUNT = 1000;
+    const COUPON_RATE = 500;
+    const DAYS_PER_COUPON = 3;
+
+    // 1. Fetch normal approved subscriptions
+    const normalSubs = await Subscription.find({
+      userSubscriptionStatus: "APR",
+    });
+
+    // 2. Fetch manual users (assuming all are approved if no status field)
+    const manualUsers = await ManualAdmin.find(); // or add a status filter if available
+
+    const normalCount = normalSubs.length;
+    const manualCount = manualUsers.length;
+    const totalFamilies = normalCount + manualCount;
+
+    // 3. Total family subscription amount
+    // For normal users, sum their subscription amounts
+
+    const totalNormalSubscription = normalCount * FAMILY_SUBSCRIPTION_AMOUNT;
+
+    console.log("Total Normal Subscription:", totalNormalSubscription);
+
+    // For manual users, fixed amount per family
+    const totalManualSubscription = manualCount * FAMILY_SUBSCRIPTION_AMOUNT;
+
+    const totalFamilySubscription =
+      totalNormalSubscription + totalManualSubscription;
+
+    // 4. Calculate number of coupons
+
+    // For normal users, sum coupons from each day field
+    let saptamiCoupons = 0,
+      nabamiCoupons = 0,
+      dashamiCoupons = 0;
+
+    normalSubs.forEach((sub) => {
+      saptamiCoupons += sub.SaptamiCoupons || 0;
+      nabamiCoupons += sub.NabamiCoupons || 0;
+      dashamiCoupons += sub.DashamiCoupons || 0;
+    });
+
+    // For manual users, assume membersCount field (if exists), or 1 member each
+    // Here assuming 1 member each for example
+    let manualMembers = manualCount; // Adjust if you have actual member count field
+
+    // Calculate coupons for manual users based on membersCount and days per coupon
+    const manualTotalCoupons = Math.floor(manualMembers / DAYS_PER_COUPON);
+
+    // Combine coupons
+    const totalCoupons = saptamiCoupons + manualTotalCoupons; //+ nabamiCoupons + dashamiCoupons + manualTotalCoupons;
+
+    // Total coupon amount
+    const totalCouponAmount = totalCoupons * COUPON_RATE;
+
+    // 5. Prepare event summary combining only normal user coupon counts
+    // (manual coupons combined as total only, since no day-wise data)
+    const eventSummary = {
+      Saptami: {
+        coupons: saptamiCoupons,
+        amount: saptamiCoupons * COUPON_RATE,
+      },
+      Navami: { coupons: nabamiCoupons, amount: nabamiCoupons * COUPON_RATE },
+      Dashami: {
+        coupons: dashamiCoupons,
+        amount: dashamiCoupons * COUPON_RATE,
+      },
+      Manual: {
+        coupons: manualTotalCoupons,
+        amount: manualTotalCoupons * COUPON_RATE,
+      },
+    };
+
+    // 6. Grand total = family subscription total + coupon amount
+    const grandTotal = totalFamilySubscription + totalCouponAmount;
+
+    res.json({
+      grandTotal,
+      familySubscription: {
+        userFamilies: normalCount,
+        manualFamilies: manualCount,
+        totalFamilies,
+        totalAmount: totalFamilySubscription,
+      },
+      eventCoupons: {
+        summary: eventSummary,
+        totalCoupons,
+        totalAmount: totalCouponAmount,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
 module.exports = router;

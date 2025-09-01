@@ -279,4 +279,117 @@ router.put("/approve-user/:id", async (req, res) => {
   }
 });
 
+
+// Approve/Reject Family Subscription & Update Payment
+router.put("/updateUserFamilySubscription", async (req, res) => {
+  const { phoneNumber, newStatus, updatedBy, paymentMode, paymentMethod } = req.body;
+  
+  if (!phoneNumber || !newStatus) {
+    return res.status(400).json({
+      message: "Both phoneNumber and newStatus are required.",
+    });
+  }
+  
+  if (!["APR", "REJ"].includes(newStatus)) {
+    return res.status(400).json({
+      message: "newStatus must be either 'APR' or 'REJ'.",
+    });
+  }
+
+  // Start a MongoDB session for transaction
+  const session = await mongoose.startSession();
+  
+  try {
+    let updatedSub, updatedPayment;
+    
+    // Execute operations within a transaction
+    await session.withTransaction(async () => {
+      // Common update fields
+      const updateMeta = {
+        userLastUpdatedDate: new Date(),
+        userLastUpdatedBy: updatedBy || "admin",
+      };
+
+      // ✅ Update subscription only if status is still 'PEN'
+      updatedSub = await Subscription.findOneAndUpdate(
+        { phoneNumber, userSubscriptionStatus: "PEN" },
+        {
+          userSubscriptionStatus: newStatus,
+          userSubscriptionLastUpdatedBy: updatedBy || "admin",
+          userSubscriptionLastUpdatedDate: new Date(),
+        },
+        { new: true, session }
+      );
+
+      if (!updatedSub) {
+        throw new Error("Pending subscription not found for the given phoneNumber.");
+      }
+
+      // ✅ Handle payment update logic
+      let paymentUpdate = { ...updateMeta };
+      
+      if (newStatus === "APR") {
+        // Validate enums from schema
+        const modeEnums = Payment.schema.path("userPaymentMode").enumValues;
+        const methodEnums = Payment.schema.path("userPaymentMethod").enumValues;
+        const validMode = modeEnums.includes(paymentMode) ? paymentMode : modeEnums[0] || "CASH";
+        const validMethod = methodEnums.includes(paymentMethod) ? paymentMethod : methodEnums[0] || "OFFLINE";
+
+        paymentUpdate = {
+          ...paymentUpdate,
+          userPaymentStatus: "APR", // Approve payment when subscription is approved
+          userPaymentAmount: updatedSub.userSubscriptionAmount,
+          userFamilyAmount: 1000, // fixed family subscription (₹1000)
+          userPaymentDate: new Date(),
+          userPaymentMode: validMode,
+          userPaymentMethod: validMethod,
+        };
+      }
+
+      if (newStatus === "REJ") {
+        paymentUpdate = {
+          ...paymentUpdate,
+          userPaymentStatus: "REJ", // Reject payment when subscription is rejected
+        };
+      }
+
+      // Update payment record
+      updatedPayment = await Payment.findOneAndUpdate(
+        { 
+          userID: updatedSub.userID, // More reliable than phoneNumber for payment lookup
+          userPaymentStatus: "PEN" 
+        },
+        paymentUpdate,
+        { new: true, session }
+      );
+
+      if (!updatedPayment) {
+        throw new Error("Pending payment record not found for the user.");
+      }
+    });
+
+    return res.status(200).json({
+      message: `User family subscription updated to '${newStatus}' successfully.`, // Fixed template literal
+      data: {
+        subscription: updatedSub,
+        payment: updatedPayment
+      },
+    });
+
+  } catch (err) {
+    console.error("Family subscription update error:", err);
+    
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ message: err.message });
+    }
+    
+    return res.status(500).json({ 
+      message: "Server error", 
+      error: err.message 
+    });
+  } finally {
+    // End the session
+    await session.endSession();
+  }
+});
 module.exports = router;
