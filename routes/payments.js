@@ -32,6 +32,7 @@ router.post("/createPayment", async (req, res) => {
       userPaymentImage,
       userPaymentSubscriptionDesc,
       userPaymentImageBase64,
+      userPaymentStatus,
     } = req.body;
 
     // FAMILY AMOUNT validation
@@ -78,7 +79,7 @@ router.post("/createPayment", async (req, res) => {
       userPaymentImage,
       userPaymentSubscriptionDesc,
       userPaymentImageBase64,
-      userPaymentStatus: "PEN",
+      userPaymentStatus,
     });
 
     await payment.save();
