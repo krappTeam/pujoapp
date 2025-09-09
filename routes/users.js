@@ -598,4 +598,32 @@ router.post("/updatePassword", async (req, res) => {
   }
 });
 
+router.post("/getUserIdByPhone", async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  if (!phoneNumber) {
+    return res
+      .status(400)
+      .json({ message: "Phone number is required in request body" });
+  }
+
+  try {
+    const user = await User.findOne({ phoneNumber: phoneNumber }).select(
+      "_id phoneNumber"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      userId: user._id,
+      phoneNumber: user.phoneNumber,
+    });
+  } catch (error) {
+    console.error("Error fetching user by phone number:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 module.exports = router;
