@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Subscription = require("../models/Subscription");
 const ManualAdmin = require("../models/ManualAdmin");
 const ManualPayment = require("../models/ManualPaymentSchema");
+const Payment = require("../models/Payment");
 
 const PRICE_PER_COUPON = 500;
 
@@ -256,6 +257,7 @@ router.get("/userDashboardTicket/:userID", async (req, res) => {
 // ==========================
 // User Dashboard Payments+Coupons
 // ==========================
+// Dashboard Route For Payments
 router.get("/userDashboardPayments/:userID", async (req, res) => {
   try {
     const { userID } = req.params;
@@ -283,38 +285,21 @@ router.get("/userDashboardPayments/:userID", async (req, res) => {
 
     if (userType === "normal") {
       payments = await Payment.find({ userID });
-      subscriptions = await Subscription.find({ userID });
-
-      approvedFamilyPayments = subscriptions.filter(
-        (p) => p.userSubscriptionStatus === "APR"
+      // Only use APPROVED payments (NOT subscriptions) for reviewing family amount
+      approvedFamilyPayments = payments.filter(
+        (p) => p.userPaymentStatus === "APR"
       );
 
-      // Check if any approved subscription has familyAmount >= 1000
-      const hasLargeFamilyPayment = approvedFamilyPayments.some(
-        (p) => Number(p.userFamilyAmount || 0) >= 1000
+      // Sum up the approved family amounts from payments
+      familyAmount = approvedFamilyPayments.reduce(
+        (sum, p) => sum + Number(p.userFamilyAmount || 0),
+        0
       );
-
-      if (hasLargeFamilyPayment) {
-        // Only count the first such subscription
-        const firstLargePayment = approvedFamilyPayments.find(
-          (p) => Number(p.userFamilyAmount || 0) >= 1000
-        );
-        familyAmount = Number(firstLargePayment.userFamilyAmount) || 1000;
-        approvedFamilyPayments = [firstLargePayment];
-      } else {
-        familyAmount = approvedFamilyPayments.reduce(
-          (sum, p) => sum + Number(p.userFamilyAmount || 0),
-          0
-        );
-        if (familyAmount === 0 && approvedFamilyPayments.length > 0) {
-          const fixedFamilyAmountPerSubscription = 1000;
-          familyAmount =
-            approvedFamilyPayments.length * fixedFamilyAmountPerSubscription;
-        }
-      }
 
       paid = approvedFamilyPayments.length > 0;
 
+      // If you use Subscription for coupons, keep this logic
+      subscriptions = await Subscription.find({ userID });
       subscriptions.forEach((sub) => {
         const couponCount = sub.SaptamiCoupons || 0;
         totalCoupons += couponCount;
@@ -335,13 +320,17 @@ router.get("/userDashboardPayments/:userID", async (req, res) => {
 
     if (userType === "manual") {
       payments = await ManualPayment.find({ userId: userID });
+      // Only use APPROVED ManualPayments for family amount
+      const approvedManualPayments = payments.filter(
+        (p) => p.paymentStatus === "APR"
+      );
 
-      familyAmount = payments.reduce(
+      familyAmount = approvedManualPayments.reduce(
         (sum, p) => sum + Number(p.familyAmount || 0),
         0
       );
 
-      paid = payments.some((p) => p.paymentStatus === "APR");
+      paid = approvedManualPayments.length > 0;
 
       payments.forEach((p) => {
         const couponCount = p.saptamiCoupons || 0;
@@ -376,10 +365,10 @@ router.get("/userDashboardPayments/:userID", async (req, res) => {
       payments,
       family: {
         paid,
-        familyAmount: Payment.userFamilyAmount,
+        familyAmount, // Correctly calculated!
         subscriptionStatus:
           userType === "normal"
-            ? approvedFamilyPayments.map((sub) => sub.userSubscriptionStatus)
+            ? approvedFamilyPayments.map((p) => p.userPaymentStatus)
             : null,
       },
       coupons: {

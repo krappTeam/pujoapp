@@ -4,6 +4,8 @@ const router = express.Router();
 const User = require("../models/User");
 const UserCoupon = require("../models/Coupon");
 const Subscription = require("../models/Subscription");
+const mongoose = require("mongoose");
+const Payment = require("../models/Payment");
 
 //--------------------SUBSCRIPTION ROUTES--------------------
 
@@ -279,17 +281,17 @@ router.put("/approve-user/:id", async (req, res) => {
   }
 });
 
-
 // Approve/Reject Family Subscription & Update Payment
 router.put("/updateUserFamilySubscription", async (req, res) => {
-  const { phoneNumber, newStatus, updatedBy, paymentMode, paymentMethod } = req.body;
-  
+  const { phoneNumber, newStatus, updatedBy, paymentMode, paymentMethod } =
+    req.body;
+
   if (!phoneNumber || !newStatus) {
     return res.status(400).json({
       message: "Both phoneNumber and newStatus are required.",
     });
   }
-  
+
   if (!["APR", "REJ"].includes(newStatus)) {
     return res.status(400).json({
       message: "newStatus must be either 'APR' or 'REJ'.",
@@ -298,10 +300,10 @@ router.put("/updateUserFamilySubscription", async (req, res) => {
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
-  
+
   try {
     let updatedSub, updatedPayment;
-    
+
     // Execute operations within a transaction
     await session.withTransaction(async () => {
       // Common update fields
@@ -322,18 +324,24 @@ router.put("/updateUserFamilySubscription", async (req, res) => {
       );
 
       if (!updatedSub) {
-        throw new Error("Pending subscription not found for the given phoneNumber.");
+        throw new Error(
+          "Pending subscription not found for the given phoneNumber."
+        );
       }
 
       // ✅ Handle payment update logic
       let paymentUpdate = { ...updateMeta };
-      
+
       if (newStatus === "APR") {
         // Validate enums from schema
         const modeEnums = Payment.schema.path("userPaymentMode").enumValues;
         const methodEnums = Payment.schema.path("userPaymentMethod").enumValues;
-        const validMode = modeEnums.includes(paymentMode) ? paymentMode : modeEnums[0] || "CASH";
-        const validMethod = methodEnums.includes(paymentMethod) ? paymentMethod : methodEnums[0] || "OFFLINE";
+        const validMode = modeEnums.includes(paymentMode)
+          ? paymentMode
+          : modeEnums[0] || "CASH";
+        const validMethod = methodEnums.includes(paymentMethod)
+          ? paymentMethod
+          : methodEnums[0] || "OFFLINE";
 
         paymentUpdate = {
           ...paymentUpdate,
@@ -355,9 +363,9 @@ router.put("/updateUserFamilySubscription", async (req, res) => {
 
       // Update payment record
       updatedPayment = await Payment.findOneAndUpdate(
-        { 
+        {
           userID: updatedSub.userID, // More reliable than phoneNumber for payment lookup
-          userPaymentStatus: "PEN" 
+          userPaymentStatus: "PEN",
         },
         paymentUpdate,
         { new: true, session }
@@ -372,24 +380,51 @@ router.put("/updateUserFamilySubscription", async (req, res) => {
       message: `User family subscription updated to '${newStatus}' successfully.`, // Fixed template literal
       data: {
         subscription: updatedSub,
-        payment: updatedPayment
+        payment: updatedPayment,
       },
     });
-
   } catch (err) {
     console.error("Family subscription update error:", err);
-    
+
     if (err.message.includes("not found")) {
       return res.status(404).json({ message: err.message });
     }
-    
-    return res.status(500).json({ 
-      message: "Server error", 
-      error: err.message 
+
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
     });
   } finally {
     // End the session
     await session.endSession();
+  }
+});
+
+router.post("/users/search", async (req, res) => {
+  try {
+    const searchString = (req.body.q || "").trim();
+
+    if (!searchString) {
+      // If no search query, return all users
+      const users = await User.find({});
+      return res.json(users);
+    }
+
+    // Regex that matches fields starting with the full search string (prefix match)
+    const regex = new RegExp("^" + searchString, "i");
+
+    const users = await User.find({
+      $or: [
+        { name: regex },
+        { phoneNumber: regex },
+        { cooperativeSociety: regex },
+      ],
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 module.exports = router;

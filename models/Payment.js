@@ -21,6 +21,11 @@ const paymentSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  userFamilyAmount: {
+    type: Number,
+    default: 0,
+    enum: [0, 1000],
+  },
   userPaymentMode: {
     type: String,
     enum: ["CASH", "CHEQUE", "UPI", "BANK TRANSFER"],

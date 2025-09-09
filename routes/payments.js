@@ -1,7 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const multer = require("multer");
-const { GridFsStorage } = require("multer-gridfs-storage");
 const crypto = require("crypto");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -14,6 +13,7 @@ const router = express.Router();
 
 // post/payment/createPayment
 // Create Payment with image
+//   P A Y M E N T   R O U T E  //
 router.post("/createPayment", async (req, res) => {
   try {
     const {
@@ -22,32 +22,63 @@ router.post("/createPayment", async (req, res) => {
       flatNumber,
       userPaymentDate,
       userPaymentAmount,
+      userFamilyAmount,
       userPaymentMode,
       userPaymentMethod,
       userPaymentRefID,
       userChequeNumber,
       userChequeBankName,
       userTransferBankName,
+      userPaymentImage,
       userPaymentSubscriptionDesc,
-      userLastUpdatedBy,
-      userPaymentImage, // base64 string from client
+      userPaymentImageBase64,
     } = req.body;
+
+    // FAMILY AMOUNT validation
+    if (userFamilyAmount === 1000) {
+      // Already approved
+      const existingApproved = await Payment.findOne({
+        userID,
+        userFamilyAmount: 1000,
+        userPaymentStatus: "APR",
+      });
+      if (existingApproved) {
+        return res.status(400).json({
+          message: "Family amount (1000) already paid and approved.",
+        });
+      }
+
+      // Already pending
+      const existingPending = await Payment.findOne({
+        userID,
+        userFamilyAmount: 1000,
+        userPaymentStatus: "PEN",
+      });
+      if (existingPending) {
+        return res.status(400).json({
+          message:
+            "Family amount (1000) payment already submitted and pending approval.",
+        });
+      }
+    }
 
     const payment = new Payment({
       userID,
       cooperativeSociety,
       flatNumber,
-      userPaymentDate: userPaymentDate ? new Date(userPaymentDate) : null,
+      userPaymentDate,
       userPaymentAmount,
+      userFamilyAmount: userFamilyAmount || 0,
       userPaymentMode,
-      userPaymentMethod: userPaymentMethod || "OFFLINE",
+      userPaymentMethod,
       userPaymentRefID,
       userChequeNumber,
       userChequeBankName,
       userTransferBankName,
-      userPaymentImage: userPaymentImage || "",
+      userPaymentImage,
       userPaymentSubscriptionDesc,
-      userLastUpdatedBy,
+      userPaymentImageBase64,
+      userPaymentStatus: "PEN",
     });
 
     await payment.save();
@@ -57,8 +88,8 @@ router.post("/createPayment", async (req, res) => {
       payment,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error creating payment", error });
+    console.error("Error creating payment:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 
@@ -193,6 +224,30 @@ router.get("/getAllPaymentsWithImages", async (req, res) => {
   } catch (error) {
     console.error("Error fetching payments:", error);
     res.status(500).json({ message: "Error fetching payments" });
+  }
+});
+
+//Route to check family amount paid or not
+router.get("/isFamilyAmountPaid/:userID", async (req, res) => {
+  try {
+    const { userID } = req.params;
+    const payment = await Payment.findOne({
+      userID,
+      userFamilyAmount: 1000,
+    });
+    if (payment) {
+      return res.status(200).json({
+        isPaid: true,
+        message: "Family amount (1000) has been paid and approved.",
+      });
+    }
+    return res.status(200).json({
+      isPaid: false,
+      message: "Family amount (1000) has not been paid yet.",
+    });
+  } catch (error) {
+    console.error("Error checking family amount payment status:", error);
+    res.status(500).json({ message: "Server error", error });
   }
 });
 

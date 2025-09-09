@@ -4,6 +4,7 @@ const router = express.Router();
 const User = require("../models/User");
 const UserCoupon = require("../models/Coupon");
 const Subscription = require("../models/Subscription");
+const ManualAdmin = require("../models/ManualAdmin");
 
 //Admin — Get total subscription, coupon, and overall amounts
 

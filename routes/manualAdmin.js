@@ -3,7 +3,7 @@ const router = express.Router();
 const User = require("../models/User");
 const mongoose = require("mongoose");
 const manualAdmin = require("../models/ManualAdmin"); // Importing the ManualAdmin schema
-const ManualPayment = require("../models/ManualPaymentSchema"); // Importing the ManualPayment schema
+const ManualPaymentSchema = require("../models/ManualPaymentSchema"); // Importing the ManualPayment schema
 const Subscription = require("../models/Subscription");
 
 // 1. Admin manual user registration
@@ -54,7 +54,7 @@ router.post("/manual-payment", async (req, res) => {
       adminNote,
     } = req.body;
 
-    const payment = new ManualPayment({
+    const payment = new ManualPaymentSchema({
       userId,
       moneyGivenTo,
       paymentType,
@@ -114,6 +114,30 @@ router.get("/total-family-manual-subscription", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/isFamilyAmountPaid/:userID", async (req, res) => {
+  try {
+    const { userID } = req.params;
+    // Ensure userID is ObjectId
+    const payment = await ManualPaymentSchema.findOne({
+      userId: userID,
+      familyAmount: 1000,
+    });
+    if (payment) {
+      return res.status(200).json({
+        isPaid: true,
+        message: "Family amount (1000) has been paid and approved.",
+      });
+    }
+    return res.status(200).json({
+      isPaid: false,
+      message: "Family amount (1000) has not been paid yet.",
+    });
+  } catch (error) {
+    console.error("Error checking family amount payment status:", error);
+    res.status(500).json({ message: "Server error", error });
   }
 });
 

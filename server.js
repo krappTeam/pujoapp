@@ -53,7 +53,6 @@ app.use(bodyParser.json());
 app.use(cors());
 
 //Invoke routes
-
 app.use("/user", usersRouter);
 
 // app.use("/subscription", subscriptionsRouter);
