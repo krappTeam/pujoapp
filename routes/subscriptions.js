@@ -59,7 +59,7 @@ router.post("/createSubscription", async (req, res) => {
       phoneNumber: data.phoneNumber,
       userSubscriptionDate: data.userSubscriptionDate || new Date(),
       userSubscriptionType: data.userSubscriptionType || "Regular",
-      userSubscriptionStatus, // Default Pending
+      userSubscriptionStatus: data.userSubscriptionStatus, // Default Pending
       userSessionYear: new Date().getFullYear(),
       // userFmlyMemberCnt: data.userFmlyMemberCnt,
       userSubscriptionAmount: data.userSubscriptionAmount,
