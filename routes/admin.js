@@ -4,6 +4,29 @@ const router = express.Router();
 const User = require("../models/User");
 const UserCoupon = require("../models/Coupon");
 const Subscription = require("../models/Subscription");
+const Payment = require("../models/Payment");
+const mongoose = require("mongoose");
+const sendPushNotification = require("../utils/sendNotification");
+
+
+
+router.post('/notify/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { title, body, data } = req.body;
+  const user = await User.findById(userId);
+  if (!user || !user.fcmToken) return res.status(404).send('User/token not found');
+
+  try {
+    const safeData = typeof data === 'object' && data !== null ? data : {};
+    await sendPushNotification(user.fcmToken, title, body, safeData);
+    res.send('Notification sent');
+  } catch (err) {
+    console.error('Error sending message:', err);
+    res.status(500).send('Notification failed: ' + err.message);
+  }
+});
+
+
 
 //--------------------SUBSCRIPTION ROUTES--------------------
 
@@ -50,49 +73,141 @@ router.get("/pending", async (req, res) => {
 //     res.status(500).json({ message: "Server error" });
 //   }
 // });
+
+
+
 // === Update User Approval Status ===
 
-router.put("/updateUserApprovalStatus", async (req, res) => {
-  const { phoneNumber, newStatus, updatedBy } = req.body;
+
+
+
+
+
+// Modify your route to accept rejectionReason for "REJ"
+router.put("/updateUserFamilySubscription", async (req, res) => {
+  const { phoneNumber, newStatus, updatedBy, paymentMode, paymentMethod, rejectionReason } = req.body;
 
   if (!phoneNumber || !newStatus) {
-    return res
-      .status(400)
-      .json({ message: "Both unitNumber and newStatus are required." });
+    return res.status(400).json({
+      message: "Both phoneNumber and newStatus are required.",
+    });
   }
 
   if (!["APR", "REJ"].includes(newStatus)) {
-    return res
-      .status(400)
-      .json({ message: "newStatus must be either 'APR' or 'REJ'." });
+    return res.status(400).json({
+      message: "newStatus must be either 'APR' or 'REJ'.",
+    });
   }
+
+  if (newStatus === "REJ" && !rejectionReason) {
+    return res.status(400).json({
+      message: "rejectionReason is required when subscription is rejected.",
+    });
+  }
+
+  const session = await mongoose.startSession();
 
   try {
-    const updated = await Subscription.findOneAndUpdate(
-      { phoneNumber, userSubscriptionStatus: "PEN" },
-      {
-        userSubscriptionStatus: newStatus,
+    let updatedSub, updatedPayment;
+
+    await session.withTransaction(async () => {
+      const updateMeta = {
         userLastUpdatedDate: new Date(),
         userLastUpdatedBy: updatedBy || "admin",
-      },
-      { new: true }
-    );
+      };
 
-    if (!updated) {
-      return res.status(404).json({
-        message: "User with status 'PEN' not found for the given phoneNumber.",
-      });
+      updatedSub = await Subscription.findOneAndUpdate(
+        { phoneNumber, userSubscriptionStatus: "PEN" },
+        {
+          userSubscriptionStatus: newStatus,
+          userSubscriptionLastUpdatedBy: updatedBy || "admin",
+          userSubscriptionLastUpdatedDate: new Date(),
+        },
+        { new: true, session }
+      );
+
+      if (!updatedSub) {
+        throw new Error("Pending subscription not found for the given phoneNumber.");
+      }
+
+      let paymentUpdate = { ...updateMeta };
+
+      if (newStatus === "APR") {
+        const modeEnums = Payment.schema.path("userPaymentMode").enumValues;
+        const methodEnums = Payment.schema.path("userPaymentMethod").enumValues;
+        const validMode = modeEnums.includes(paymentMode) ? paymentMode : modeEnums[0] || "CASH";
+        const validMethod = methodEnums.includes(paymentMethod) ? paymentMethod : methodEnums[0] || "OFFLINE";
+
+        paymentUpdate = {
+          ...paymentUpdate,
+          userPaymentStatus: "APR",
+          userPaymentAmount: updatedSub.userSubscriptionAmount,
+          userFamilyAmount: 1000,
+          userPaymentDate: new Date(),
+          userPaymentMode: validMode,
+          userPaymentMethod: validMethod,
+        };
+      }
+
+      if (newStatus === "REJ") {
+        paymentUpdate = {
+          ...paymentUpdate,
+          userPaymentStatus: "REJ",
+        };
+      }
+
+      updatedPayment = await Payment.findOneAndUpdate(
+        {
+          userID: updatedSub.userID,
+          userPaymentStatus: "PEN",
+        },
+        paymentUpdate,
+        { new: true, session }
+      );
+
+      if (!updatedPayment) {
+        throw new Error("Pending payment record not found for the user.");
+      }
+    });
+
+    // After successful transaction, send push notification to user
+    const user = await User.findById(updatedSub.userID); // Your user model should have the FCM token stored
+    const fcmToken = user?.fcmToken;
+
+    let notificationTitle = "Payment Update";
+    let notificationBody = "";
+
+    if (newStatus === "APR") {
+      notificationBody = "Your payment has been approved by admin.";
+    } else if (newStatus === "REJ") {
+      notificationBody = `Your payment has been rejected by admin. Reason: ${rejectionReason}`;
     }
 
+    await sendPushNotification(fcmToken, notificationTitle, notificationBody);
+
     return res.status(200).json({
-      message: `User approval status updated to '${newStatus}' successfully.`,
-      data: updated,
+      message: `User family subscription updated to '${newStatus}' successfully.`,
+      data: {
+        subscription: updatedSub,
+        payment: updatedPayment,
+      },
     });
   } catch (err) {
-    console.error("Approval update error:", err);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Family subscription update error:", err);
+
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ message: err.message });
+    }
+
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
+  } finally {
+    await session.endSession();
   }
 });
+
 
 // REJECT SUBSCRIPTION (Admin)
 
@@ -129,6 +244,7 @@ router.get("/approved", async (req, res) => {
   try {
     const approvedSubs = await Subscription.find({
       userSubscriptionStatus: "APR",
+      // userPaymentStatus: "APR",
     }).populate("userID", "name phoneNumber cooperativeSociety flatNumber");
     res.status(200).json(approvedSubs);
   } catch (error) {
@@ -140,6 +256,7 @@ router.get("/rejected", async (req, res) => {
   try {
     const approvedSubs = await Subscription.find({
       userSubscriptionStatus: "REJ",
+      // userPaymentStatus: "REJ",
     }).populate("userID", "name phoneNumber cooperativeSociety flatNumber");
     res.status(200).json(approvedSubs);
   } catch (error) {
@@ -255,7 +372,7 @@ router.put("/reject-user/:id", async (req, res) => {
 // });
 
 // User — Get coupon status & days
-router.put("/approve-user/:id", async (req, res) => {
+router.put("/approveCoupon-user/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -278,5 +395,37 @@ router.put("/approve-user/:id", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
+router.post("/users/search", async (req, res) => {
+  try {
+    const searchString = (req.body.q || "").trim();
+
+    if (!searchString) {
+      // If no search query, return all users
+      const users = await User.find({});
+      return res.json(users);
+    }
+
+    // Regex that matches fields starting with the full search string (prefix match)
+    const regex = new RegExp("^" + searchString, "i");
+
+    const users = await User.find({
+      $or: [
+        { name: regex },
+        { phoneNumber: regex },
+        { cooperativeSociety: regex },
+      ],
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 
 module.exports = router;

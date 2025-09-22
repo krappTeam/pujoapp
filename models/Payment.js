@@ -21,15 +21,18 @@ const paymentSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  userFamilyAmount: {
+    type: Number,
+    default: 0,
+    enum: [0, 1000],
+  },
   userPaymentMode: {
     type: String,
-    enum: ["CASH", "CHEQUE", "UPI","BANK TRANSFER"],
-    required: true,
+    enum: ["CASH", "CHEQUE", "UPI"],
   },
   userPaymentMethod: {
     type: String,
-    enum: ["ONLINE", "OFFLINE"],
-    required: true,
+    enum: ["OFFLINE", "ONLINE"],
   },
   userPaymentRefID: {
     type: String,
@@ -61,6 +64,7 @@ const paymentSchema = new mongoose.Schema({
   userLastUpdatedBy: {
     type: String,
   },
+  userPaymentImageBase64: { type: String },
 });
 
 const Payment = mongoose.model("Payment", paymentSchema);

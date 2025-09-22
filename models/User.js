@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     userRole: { type: String, enum: ["U01", "U02", "U03"] },
     userActive: { type: Boolean },
     userSecretCode: { type: Number, min: 1000, max: 9999, required: true },
+    fcmToken: { type: String }, // 🔔 Store device token
     userCreationDate: { type: Date, default: Date.now, required: true },
     userCreationBy: { type: String, default: "Admin" },
     userSessionYear: {
@@ -25,7 +26,11 @@ const userSchema = new mongoose.Schema(
     userCpnActiveStatus: { type: Boolean, required: true },
     userLastUpdatedDate: { type: Date, default: Date.now },
     userLastUpdatedBy: { type: String, default: "Admin" },
+    //✅ Store payment image in Base64 format
+    userPaymentImageBase64: { type: String },
   },
+  
+  
   { timestamps: { updatedAt: "updated_at" } }
 );
 

@@ -27,6 +27,7 @@ const userSubscription = new mongoose.Schema({
   userSubscriptionStatus: {
     type: String,
     enum: ["PEN", "APR", "REJ"],
+    default: "PEN",
   },
   userSessionYear: {
     type: Number,
